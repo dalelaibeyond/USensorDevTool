@@ -423,7 +423,7 @@ function formatValue(value, indent = 0) {
                         backgroundColor: '#f0efe7',//'#f3eeeeff',
                         padding: '10px',
                         borderRadius: '10px',
-                        fontFamily: 'Adelle,Roboto Slab,DejaVu Serif,Georgia,Times New Roman,sans-serif',//'Roboto Condensed, monospace',
+                        fontFamily: 'sans-serif, monospace',//'Roboto Condensed, monospace',
                         fontSize: '13px',
                         overflowX: 'auto',
                         
