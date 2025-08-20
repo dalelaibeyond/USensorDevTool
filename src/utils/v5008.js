@@ -3,6 +3,31 @@
  * @param {Buffer} message - The MQTT message buffer.
  * @returns {Object} Parsed JSON object.
  */
+
+
+/*
+This is a JavaScript function named `V5008ToJson` that parses an MQTT message buffer into a JSON object. The function takes two parameters: `topic` and `message`, where `message` is a Buffer object representing the MQTT message.
+
+Here's a succinct summary of what the function does:
+
+1. Converts the message buffer to a hexadecimal string.
+2. Extracts the message ID (first two characters of the hexadecimal string).
+3. Uses a switch statement to parse the message based on the message ID.
+4. For each message ID, extracts specific fields from the message buffer using helper functions `readHex` and `readNum`.
+5. Constructs a JSON object with the extracted fields and returns it.
+
+The function supports multiple message formats, including:
+
+* Heartbeat messages (IDs 'CB' and 'CC')
+* Tag update messages (ID 'BB')
+* Temperature and humidity update messages (IDs '01' to '05')
+* Noise sensor update messages (IDs '0A' to '0C')
+* Device update messages (ID 'BA')
+* Gateway and module update messages (ID 'EF' with subtypes '01' and '02')
+
+If the message ID is not recognized, the function returns a JSON object with the raw message buffer and a message type of 'UNKNOWN'.
+*/
+
 export function V5008ToJson(topic, message) {
 
   // 1. Convert to hex string (uppercase)
@@ -38,16 +63,16 @@ export function V5008ToJson(topic, message) {
       break;
     }
     case 'BB': {
-      result.msg_format = '[BB][mod_add][mod_id(4B)][Reserved][u_num][u_tag_num][u_no + u_alarm + u_tag(4B)] x u_tag_num';
+      result.msg_format = '[BB][mod_add][mod_id(4B)][Reserved][u_num][tag_num][u_no + u_alarm + u_tag(4B)] x tag_num';
       offset = 2;
       const mod_add = readNum(msg_raw, offset, 2);
       const mod_id = readNum(msg_raw, offset + 2, 8).toString(); // Convert to decimal string
       const reserved = readHex(msg_raw, offset + 10, 2);
       const u_num = readNum(msg_raw, offset + 12, 2);
-      const u_tag_num = readNum(msg_raw, offset + 14, 2);
+      const tag_num = readNum(msg_raw, offset + 14, 2);
       offset += 16;
       const u_sensor_data = [];
-      for (let i = 0; i < u_tag_num && offset + 10 <= msg_raw.length; i++) {
+      for (let i = 0; i < tag_num && offset + 10 <= msg_raw.length; i++) {
         const u_no = readNum(msg_raw, offset, 2); // Correctly parse u_no
         const u_alarm = readNum(msg_raw, offset + 2, 2); // Correctly parse u_alarm
         const u_tag = readHex(msg_raw, offset + 4, 8); // Correctly parse u_tag
@@ -58,7 +83,7 @@ export function V5008ToJson(topic, message) {
       result.mod_add = mod_add;
       result.mod_id = mod_id;
       result.u_num = u_num;
-      result.u_tag_num = u_tag_num;
+      result.tag_num = tag_num;
       result.u_sensor_data = u_sensor_data;
       break;
     }
@@ -112,7 +137,7 @@ export function V5008ToJson(topic, message) {
       break;
     }
     case 'BA': {
-      // DR_UPDATE: [BA][mod_add][mod_id(4B)][dr_status]
+      result.msg_format = '[BA][mod_add][mod_id(4B)][dr_status]';
       offset = 2;
       const mod_add = readNum(msg_raw, offset, 2);
       const mod_id = readNum(msg_raw, offset + 2, 8).toString(); // Convert to decimal string
@@ -129,27 +154,27 @@ export function V5008ToJson(topic, message) {
       const subType = readHex(msg_raw, offset, 2);
       offset += 2;
       if (subType === '01') {
-        const hd_type = readNum(msg_raw, offset, 4).toString(); // Parse hd_type (2 bytes)
-        const hd_fm_ver = readNum(msg_raw, offset + 4, 8).toString(); // Parse hd_fm_ver (4 bytes)
-        const hd_ip = [
+        const hub_type = readNum(msg_raw, offset, 4).toString(); // Parse hub_type (2 bytes)
+        const hub_fm_ver = readNum(msg_raw, offset + 4, 8).toString(); // Parse hub_fm_ver (4 bytes)
+        const hub_ip = [
           readNum(msg_raw, offset + 12, 2),
           readNum(msg_raw, offset + 14, 2),
           readNum(msg_raw, offset + 16, 2),
           readNum(msg_raw, offset + 18, 2),
         ].join('.'); // Convert to IPv4 format
-        const hd_mask = [
+        const hub_mask = [
           readNum(msg_raw, offset + 20, 2),
           readNum(msg_raw, offset + 22, 2),
           readNum(msg_raw, offset + 24, 2),
           readNum(msg_raw, offset + 26, 2),
         ].join('.'); // Convert to IPv4 format
-        const hd_gateway = [
+        const hub_gateway = [
           readNum(msg_raw, offset + 28, 2),
           readNum(msg_raw, offset + 30, 2),
           readNum(msg_raw, offset + 32, 2),
           readNum(msg_raw, offset + 34, 2),
         ].join('.'); // Convert to IPv4 format
-        const hd_mac = [
+        const hub_mac = [
           readHex(msg_raw, offset + 36, 2),
           readHex(msg_raw, offset + 38, 2),
           readHex(msg_raw, offset + 40, 2),
@@ -158,29 +183,68 @@ export function V5008ToJson(topic, message) {
           readHex(msg_raw, offset + 46, 2),
         ].join(':'); // Convert to MAC address format
 
-        result.msg_format = '[EF][01][hd_type(2B)][hd_fm_ver(4B)][hd_ip(4B)][hd_mask(4B)][hd_gateway(4B)][hd_mac(6B)]';
+        result.msg_format = '[EF][01][hub_type(2B)][hub_fm_ver(4B)][hub_ip(4B)][hub_mask(4B)][hub_gateway(4B)][hub_mac(6B)]';
         result.msg_type = 'DEVICE_UPDATE';
         result.subType = 'gateway'; // 01 - gateway
-        result.hd_type = hd_type;
-        result.hd_fm_ver = hd_fm_ver;
-        result.hd_ip = hd_ip;
-        result.hd_mask = hd_mask;
-        result.hd_gateway = hd_gateway;
-        result.hd_mac = hd_mac;
+        result.hub_type = hub_type;
+        result.hub_fm_ver = hub_fm_ver;
+        result.hub_ip = hub_ip;
+        result.hub_mask = hub_mask;
+        result.hub_gateway = hub_gateway;
+        result.hub_mac = hub_mac;
       } else if (subType === '02') {
         result.msg_format = '[EF][02][mod_add + fm_ver(6B)] x (until the rest bytes length < 7)';
         result.msg_type = 'DEVICE_UPDATE';
-        result.subType = 'u_module'; // 02 - module
+        result.subType = 'module'; // 02 - module
         result.sections = [];
         while (offset + 14 <= msg_raw.length) {
           const mod_add = readNum(msg_raw, offset, 2);
-          const m_fm_ver = readHex(msg_raw, offset + 2, 12);
+          const m_fm_ver = readNum(msg_raw, offset + 2, 12).toString();
           result.sections.push({ mod_add, m_fm_ver });
           offset += 14;
         }
       }
       break;
     }
+
+    case 'AA': {
+
+      result.msg_format = '[AA][hub_id(4B)][CmdResult][E1][mod_add][u_no + u_color] x n (until null)';
+      result.msg_type = 'COLOR_SET_RESPONSE';
+      offset = 2;
+
+      const hub_id = readNum(msg_raw, offset, 8).toString(); // Convert to decimal string
+      const cmd_result = readHex(msg_raw, offset + 8, 2); // (A0 = Fail, A1 = Success)
+      const cmd_code = readHex(msg_raw, offset + 10, 2); // (E1 = Color Set Command)
+      const mod_add = readNum(msg_raw, offset + 12, 2); // Module address (2 bytes)
+
+      result.hub_id = hub_id;
+      result.cmd_result = cmd_result;
+      result.cmd_code = cmd_code;
+      result.mod_add = mod_add;
+
+      result.sections = [];
+      offset += 14; // Adjust offset to skip mod_id and cmd_result
+
+      while (offset + 4 <= msg_raw.length) {
+
+        const u_no = readNum(msg_raw, offset, 2);
+        const u_color = readNum(msg_raw, offset + 2, 2);
+        // Check for null termination (if required by format)
+        //if (u_no === 0 && u_color === 0) {
+        //  break;
+        //}
+        result.sections.push({u_no, u_color});
+        offset += 4;
+      }
+      // Handle empty sections
+      //if (result.sections.length === 0) {
+      //  console.warn('No valid sections found for case AA');
+      //}
+
+      break;
+    }
+   
     default: {
       result.msg_raw = msg_raw;
       result.msg_type = 'UNKNOWN';
@@ -191,14 +255,3 @@ export function V5008ToJson(topic, message) {
   return result;
 }
 
-
-// Helper function to get local date and time in ISO format
-// This function returns the current local date and time in ISO format with milliseconds
-function getLocalDateTime() {
-    const localDate = new Date();
-    // Manually adjust to local timezone by adjusting for the offset
-    const localDateTime = new Date(localDate.getTime() - localDate.getTimezoneOffset() * 60000);
-    // Convert to ISO string, including milliseconds, and add 'Z' to indicate it's in UTC
-    return localDateTime.toISOString();
-}
-  

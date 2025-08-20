@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
-import mqtt from 'mqtt';
-import { V5008ToJson } from './utils/v5008';
+
 import './App.css';
+import mqtt from 'mqtt';
+import { useState, useEffect } from 'react';
+import { V5008ToJson } from './utils/v5008';
+import { V6800ToJson } from './utils/v6800';
+import { formatTimestamp, formatValue, isV5008, isV6800, isG6000 } from './utils/tools';
 
 function App() {
   const [broker, setBroker] = useState('');
@@ -15,96 +18,6 @@ function App() {
   const [appLog, setAppLog] = useState([]);
 
   const maxLogEntries = 500; // Maximum number of log entries to keep
-
-  const formatTimestamp = (date) => {
-    //const options = { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short' };
-    const options = { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false};
-    return date.toLocaleString('en-US', options).replace(',', '');
-  };
-
-function isValidIdentifier(str) {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(str);
-}
-
-function colorKey(text) {
-  return `<span style="color: #000000ff;">${text}</span>`;
-}
-
-function colorString(text) {
-  return `<span style="color: #0b770bff;">'${text}'</span>`; // green
-}
-
-function colorNumber(text) {
-  return `<span style="color: #b1b10fff;">${text}</span>`; // yellow
-}
-
-function formatObject(obj, indent) {
-  const pad = '  '.repeat(indent);
-  const maxKeyLength = Math.max(
-    ...Object.keys(obj).map(k => (isValidIdentifier(k) ? k.length : k.length + 2))
-  );
-
-  return Object.entries(obj)
-    .map(([k, v]) => {
-      const keyStr = isValidIdentifier(k) ? k : `'${k}'`;
-      const spaces = ' ';//.repeat(maxKeyLength - keyStr.length);
-      return `${'  '.repeat(indent + 1)}${colorKey(keyStr)}${spaces}: ${formatValue(v, indent + 1)}`;
-    })
-    .join(',\n');
-}
-
-function formatValue(value, indent = 0) {
-  const pad = '  '.repeat(indent);
-
-  if (Array.isArray(value)) {
-    const isSimpleObjectArray =
-      value.length > 0 &&
-      value.every(
-        v =>
-          typeof v === 'object' &&
-          v !== null &&
-          !Array.isArray(v) &&
-          Object.values(v).every(
-            val => typeof val === 'string' || typeof val === 'number' || val === null
-          )
-      );
-
-    if (isSimpleObjectArray) {
-      const maxKeyLength = Math.max(
-        ...value.flatMap(obj =>
-          Object.keys(obj).map(k => (isValidIdentifier(k) ? k.length : k.length + 2))
-        )
-      );
-
-      const arrStr = value
-        .map(obj => {
-          const fields = Object.entries(obj)
-            .map(([k, val]) => {
-              const keyStr = isValidIdentifier(k) ? k : `'${k}'`;
-              const spaces = ' '.repeat(maxKeyLength - keyStr.length);
-              return `${colorKey(keyStr)}${spaces}: ${
-                typeof val === 'string' ? colorString(val) : colorNumber(val)
-              }`;
-            })
-            .join(', ');
-          return `{ ${fields} }`;
-        })
-        .join(',\n' + '  '.repeat(indent + 1));
-      return `[\n${'  '.repeat(indent + 1)}${arrStr}\n${pad}]`;
-    } else {
-      const arrStr = value.map(v => formatValue(v, indent + 1)).join(',\n');
-      return `[\n${arrStr}\n${pad}]`;
-    }
-  } else if (typeof value === 'object' && value !== null) {
-    return `{\n${formatObject(value, indent)}\n${pad}}`;
-  } else if (typeof value === 'string') {
-    return colorString(value);
-  } else if (typeof value === 'number') {
-    return colorNumber(value);
-  } else {
-    return String(value);
-  }
-}
 
   const logEvent = (type, message) => {
     const timestamp = formatTimestamp(new Date());
@@ -136,9 +49,33 @@ function formatValue(value, indent = 0) {
 
     mqttClient.on('message', (topic, message) => {
 
-      const parsedMessage = V5008ToJson(topic, message);
-      const formatedMessage = formatValue(parsedMessage);
-      logEvent('Message', `[${topic}] \n${formatedMessage}`);
+      if (isV5008(topic)) {
+
+        const parsedMessage = V5008ToJson(topic, message);
+        const formatedMessage = formatValue(parsedMessage);
+        logEvent('Message', `[${topic}] \n${formatedMessage}`);
+
+      }
+      else if (isV6800(topic)) {
+
+        const parsedMessage = V6800ToJson(topic, message);
+        const formatedMessage = formatValue(parsedMessage);
+        logEvent('Message', `[${topic}] \n${formatedMessage}`);
+
+      }
+      else if (isG6000(topic)) {
+
+        const parsedMessage = JSON.parse(message);
+        const formatedMessage = formatValue(parsedMessage);
+        logEvent('Message', `[${topic}] \n${formatedMessage}`);
+
+      }
+      else {
+
+        logEvent('Error', `Unsupported topic: ${topic}`);
+
+      }
+
 
     });
 
@@ -254,7 +191,7 @@ function formatValue(value, indent = 0) {
       <div className="container">
         <div className="header">
           <h1 className="title">
-            <img src="/icon-dashboard.svg" alt="Dashboard Icon" className="icon" /> Sensor Messages Dashboard
+            <img src="/icon-dashboard.svg" alt="Dashboard Icon" className="icon" /> Sensor Data Dashboard
           </h1>
           <p className="subtitle">Connect, subscribe, and publish MQTT messages</p>
         </div>
