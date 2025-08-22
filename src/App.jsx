@@ -4,6 +4,7 @@ import mqtt from 'mqtt';
 import { useState, useEffect } from 'react';
 import { V5008ToJson } from './utils/v5008';
 import { V6800ToJson } from './utils/v6800';
+import { G6000ToJson } from './utils/g6000';
 import { formatTimestamp, formatValue, isV5008, isV6800, isG6000 } from './utils/tools';
 
 function App() {
@@ -65,7 +66,7 @@ function App() {
       }
       else if (isG6000(topic)) {
 
-        const parsedMessage = JSON.parse(message);
+        const parsedMessage = G6000ToJson(topic, message);
         const formatedMessage = formatValue(parsedMessage);
         logEvent('Message', `[${topic}] \n${formatedMessage}`);
 

@@ -1,46 +1,52 @@
+
 /**
- * Parse an MQTT message buffer according to the provided message format.
- * @param {Buffer} message - The MQTT message buffer.
- * @returns {Object} Parsed JSON object.
- */
-
-
-/*
-This is a JavaScript function named `V5008ToJson` that parses an MQTT message buffer into a JSON object. The function takes two parameters: `topic` and `message`, where `message` is a Buffer object representing the MQTT message.
-
-Here's a succinct summary of what the function does:
-
-1. Converts the message buffer to a hexadecimal string.
-2. Extracts the message ID (first two characters of the hexadecimal string).
-3. Uses a switch statement to parse the message based on the message ID.
-4. For each message ID, extracts specific fields from the message buffer using helper functions `readHex` and `readNum`.
-5. Constructs a JSON object with the extracted fields and returns it.
-
-The function supports multiple message formats, including:
-
-* Heartbeat messages (IDs 'CB' and 'CC')
-* Tag update messages (ID 'BB')
-* Temperature and humidity update messages (IDs '01' to '05')
-* Noise sensor update messages (IDs '0A' to '0C')
-* Device update messages (ID 'BA')
-* Gateway and module update messages (ID 'EF' with subtypes '01' and '02')
-
-If the message ID is not recognized, the function returns a JSON object with the raw message buffer and a message type of 'UNKNOWN'.
+  * v5008.js
+  * Utility functions for parsing v5008 messages
+  * @param {Buffer} message - The MQTT message buffer.
+  * @returns {Object} Parsed JSON object. 
+  * @author Dale.lai
+  * @version 1.0.0
+  * @date 2025-08-1
+  * 
+  * Message Format:
+  * HEART_BEAT 
+  * [CB or CC] [mod_add + mod_id(4B) + u_num] x 5
+  * 
+  * TAG_UPDATE
+  * [BB][mod_add][mod_id(4B)][Reserved][u_num][tag_num][u_no + u_alarm + u_tag(4B)] x tag_num
+  * 
+  * TH_UPDATE
+  * [01-05][mod_add][mod_id(4B)][th_add + th_temp(4B) + th_hum(4B)] x 6
+  * 
+  * NS_UPDATE
+  * [01-05][mod_add][mod_id(4B)][ns_add + ns_temp(4B) + ns_hum(4B)] x 6 
+  * 
+  * DR_UPDATE
+  * [BA][mod_add][mod_id(4B)][dr_status]
+  * 
+  * DEVICE_UPDATE
+  * [EF][01][hub_type(2B)][hub_fm_ver(4B)][hub_ip(4B)][hub_mask(4B)][hub_gateway(4B)][hub_mac(6B)]
+  * [EF][02][mod_add + fm_ver(6B)] x (until the rest bytes length < 7)
+  * 
+  * COLOR_SET_RESPONSE
+  * [AA][hub_id(4B)][CmdResult][E1][mod_add][u_no + u_color] x n (until null)
+  * 
+  *
+  * 
 */
 
 export function V5008ToJson(topic, message) {
 
-  // 1. Convert to hex string (uppercase)
+  //Convert to hex string (uppercase)
   const msg_raw = message.toString('hex').toUpperCase();
  
-  //console.log(`Info | [${getLocalDateTime()}][${topic}] ${msg_raw}`);
-
-  // 2. Get message ID (first byte, 2 hex chars)
+  //Get message ID (first byte, 2 hex chars)
   const msg_id = msg_raw.slice(0, 2);
 
   // Helper to read hex substrings as numbers or strings
   const readHex = (str, start, len) => str.slice(start, start + len);
   const readNum = (str, start, len) => parseInt(str.slice(start, start + len), 16);
+  const readIP = (sec1, sec2, sec3, sec4) => {  return [sec1, sec2, sec3, sec4].join('.');}
 
   let offset = 0;
   let result = { msg_raw /*, msg_id*/ };
@@ -82,6 +88,7 @@ export function V5008ToJson(topic, message) {
       result.msg_type = 'TAG_UPDATE';
       result.mod_add = mod_add;
       result.mod_id = mod_id;
+      result.reserved = reserved;
       result.u_num = u_num;
       result.tag_num = tag_num;
       result.u_sensor_data = u_sensor_data;
